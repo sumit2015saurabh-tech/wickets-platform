@@ -1,0 +1,19 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model GamingLimit {
+  id             String   @id @default(uuid())
+  userId         String   @unique @map("user_id")
+  maxStakePerBet Int      @default(50000) @map("max_stake_per_bet")
+  maxDailyStake  Int      @default(200000) @map("max_daily_stake")
+  dailyStakeUsed Int      @default(0) @map("daily_stake_used")
+  selfExcludedUntil DateTime? @map("self_excluded_until")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  @@map("gaming_limits")
+}

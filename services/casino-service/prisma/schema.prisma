@@ -1,0 +1,35 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model CasinoGame {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  category    String
+  minBet      Int      @default(10) @map("min_bet")
+  maxBet      Int      @default(10000) @map("max_bet")
+  isActive    Boolean  @default(true) @map("is_active")
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  sessions    CasinoSession[]
+  @@map("casino_games")
+}
+
+model CasinoSession {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  gameId    String   @map("game_id")
+  status    String   @default("ACTIVE")
+  totalBet  Int      @default(0) @map("total_bet")
+  totalWin  Int      @default(0) @map("total_win")
+  startedAt DateTime @default(now()) @map("started_at")
+  closedAt  DateTime? @map("closed_at")
+  game      CasinoGame @relation(fields: [gameId], references: [id])
+  @@map("casino_sessions")
+}

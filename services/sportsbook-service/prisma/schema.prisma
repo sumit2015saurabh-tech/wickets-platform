@@ -1,0 +1,53 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum BetStatus {
+  PENDING
+  ACCEPTED
+  WON
+  LOST
+  VOID
+  REJECTED
+}
+
+enum BetType {
+  SINGLE
+  MULTI
+}
+
+model Bet {
+  id           String    @id @default(uuid())
+  userId       String    @map("user_id")
+  type         BetType   @default(SINGLE)
+  stake        Int
+  totalOdds    Decimal   @map("total_odds") @db.Decimal(10, 4)
+  potentialWin Int       @map("potential_win")
+  status       BetStatus @default(PENDING)
+  payout       Int?
+  settledAt    DateTime? @map("settled_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  legs         BetLeg[]
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("bets")
+}
+
+model BetLeg {
+  id              String    @id @default(uuid())
+  betId           String    @map("bet_id")
+  marketId        String    @map("market_id")
+  selectionId     String    @map("selection_id")
+  oddsAtPlacement Decimal   @map("odds_at_placement") @db.Decimal(8, 2)
+  selectionName   String    @map("selection_name")
+  marketName      String    @map("market_name")
+  fixtureId       String    @map("fixture_id")
+  fixtureLabel    String    @map("fixture_label")
+  result          BetStatus @default(PENDING)
+  bet             Bet       @relation(fields: [betId], references: [id], onDelete: Cascade)
+  @@map("bet_legs")
+}

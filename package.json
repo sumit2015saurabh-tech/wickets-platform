@@ -1,0 +1,19 @@
+{
+  "name": "wickets-platform",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "services/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "docker:up": "docker compose up -d --build",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f",
+    "migrate:all": "node scripts/migrate-all.js",
+    "seed:all": "node scripts/seed-all.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

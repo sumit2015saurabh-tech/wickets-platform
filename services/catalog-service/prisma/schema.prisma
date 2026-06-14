@@ -1,0 +1,70 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum FixtureStatus {
+  SCHEDULED
+  LIVE
+  COMPLETED
+  CANCELLED
+  SUSPENDED
+}
+
+model Sport {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  slug      String   @unique
+  isActive  Boolean  @default(true) @map("is_active")
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  competitions Competition[]
+  @@map("sports")
+}
+
+model Competition {
+  id        String   @id @default(uuid())
+  sportId   String   @map("sport_id")
+  name      String
+  slug      String
+  country   String?
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  sport     Sport    @relation(fields: [sportId], references: [id], onDelete: Cascade)
+  fixtures  Fixture[]
+  @@unique([sportId, slug])
+  @@map("competitions")
+}
+
+model Team {
+  id        String   @id @default(uuid())
+  name      String
+  shortName String?  @map("short_name")
+  country   String?
+  createdAt DateTime @default(now()) @map("created_at")
+  homeFixtures Fixture[] @relation("HomeTeam")
+  awayFixtures Fixture[] @relation("AwayTeam")
+  @@map("teams")
+}
+
+model Fixture {
+  id            String        @id @default(uuid())
+  competitionId String        @map("competition_id")
+  homeTeamId    String        @map("home_team_id")
+  awayTeamId    String        @map("away_team_id")
+  startTime     DateTime      @map("start_time")
+  status        FixtureStatus @default(SCHEDULED)
+  homeScore     Int?          @map("home_score")
+  awayScore     Int?          @map("away_score")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+  competition   Competition   @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  homeTeam      Team          @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  awayTeam      Team          @relation("AwayTeam", fields: [awayTeamId], references: [id])
+  @@index([status, startTime])
+  @@map("fixtures")
+}

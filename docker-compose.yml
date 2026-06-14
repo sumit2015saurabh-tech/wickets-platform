@@ -1,0 +1,298 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: wickets
+      POSTGRES_PASSWORD: wickets_secret
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/postgres/init-databases.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U wickets']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    ports:
+      - '5672:5672'
+      - '15672:15672'
+    environment:
+      RABBITMQ_DEFAULT_USER: wickets
+      RABBITMQ_DEFAULT_PASS: wickets_secret
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - '6379:6379'
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: services/api-gateway/Dockerfile
+    ports:
+      - '8080:8080'
+    environment:
+      PORT: 8080
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-dev-access-secret-change-in-production-min-32-chars}
+      AUTH_SERVICE_URL: http://auth-service:3001
+      WALLET_SERVICE_URL: http://wallet-service:3002
+      CATALOG_SERVICE_URL: http://catalog-service:3003
+      ODDS_SERVICE_URL: http://odds-service:3004
+      SPORTSBOOK_SERVICE_URL: http://sportsbook-service:3005
+      SETTLEMENT_SERVICE_URL: http://settlement-service:3006
+      CASINO_SERVICE_URL: http://casino-service:3007
+      PROMOTIONS_SERVICE_URL: http://promotions-service:3008
+      NOTIFICATION_SERVICE_URL: http://notification-service:3009
+      KYC_SERVICE_URL: http://kyc-service:3010
+      CMS_SERVICE_URL: http://cms-service:3011
+      SUPPORT_SERVICE_URL: http://support-service:3012
+      COMPLIANCE_SERVICE_URL: http://compliance-service:3013
+      LIVE_SERVICE_URL: http://live-service:3014
+      FILE_SERVICE_URL: http://file-service:3015
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:5173}
+    depends_on:
+      auth-service:
+        condition: service_started
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: services/auth-service/Dockerfile
+    environment:
+      PORT: 3001
+      DATABASE_URL: postgresql://wickets:wickets_secret@postgres:5432/auth_db
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-dev-access-secret-change-in-production-min-32-chars}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-refresh-secret-change-in-production-min-32-chars}
+      RABBITMQ_URL: amqp://wickets:wickets_secret@rabbitmq:5672
+      SERVICE_API_KEY: ${SERVICE_API_KEY:-internal-service-key-change-me}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  wallet-service:
+    build:
+      context: .
+      dockerfile: services/wallet-service/Dockerfile
+    environment:
+      PORT: 3002
+      DATABASE_URL: postgresql://wickets:wickets_secret@postgres:5432/wallet_db
+      RABBITMQ_URL: amqp://wickets:wickets_secret@rabbitmq:5672
+      SERVICE_API_KEY: ${SERVICE_API_KEY:-internal-service-key-change-me}
+      UPLOAD_DIR: /app/uploads
+    volumes:
+      - wallet_uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  catalog-service:
+    build:
+      context: .
+      dockerfile: services/catalog-service/Dockerfile
+    environment:
+      PORT: 3003
+      DATABASE_URL: postgresql://wickets:wickets_secret@postgres:5432/catalog_db
+      SERVICE_API_KEY: ${SERVICE_API_KEY:-internal-service-key-change-me}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  odds-service:
+    build:
+      context: .
+      dockerfile: services/odds-service/Dockerfile
+    environment:
+      PORT: 3004
+      DATABASE_URL: postgresql://wickets:wickets_secret@postgres:5432/odds_db
+      CATALOG_SERVICE_URL: http://catalog-service:3003
+      SERVICE_API_KEY: ${SERVICE_API_KEY:-internal-service-key-change-me}
+      RABBITMQ_URL: amqp://wickets:wickets_secret@rabbitmq:5672
+    depends_on:
+      postgres:
+        condition: service_healthy
+      catalog-service:
+        condition: service_started
+
+  sportsbook-service:
+    build:
+      context: .
+      dockerfile: services/sportsbook-service/Dockerfile
+    environment:
+      PORT: 3005
+      DATABASE_URL: postgresql://wickets:wickets_secret@postgres:5432/sportsbook_db
+      ODDS_SERVICE_URL: http://odds-service:3004
+      WALLET_SERVICE_URL: http://wallet-service:3002
+      COMPLIANCE_SERVICE_URL: http://compliance-service:3013
+      SERVICE_API_KEY: ${SERVICE_API_KEY:-internal-service-key-change-me}
+      RABBITMQ_URL: amqp://wickets:wickets_secret@rabbitmq:5672
+    depends_on:
+      postgres:
+        condition: service_healthy
+      wallet-service:
+        condition: service_started
+      odds-service:
+        condition: service_started
+
+  settlement-service:
+    build:
+      context: .
+      dockerfile: services/settlement-service/Dockerfile
+    environment:
+      PORT: 3006
+      DATABASE_URL: postgresql://wickets:wickets_secret@postgres:5432/settlement_db
+      SPORTSBOOK_SERVICE_URL: http://sportsbook-service:3005
+      WALLET_SERVICE_URL: http://wallet-service:3002
+      ODDS_SERVICE_URL: http://odds-service:3004
+      SERVICE_API_KEY: ${SERVICE_API_KEY:-internal-service-key-change-me}
+      RABBITMQ_URL: amqp://wickets:wickets_secret@rabbitmq:5672
+    depends_on:
+      postgres:
+        condition: service_healthy
+      sportsbook-service:
+        condition: service_started
+
+  casino-service:
+    build:
+      context: .
+      dockerfile: services/casino-service/Dockerfile
+    environment:
+      PORT: 3007
+      DATABASE_URL: postgresql://wickets:wickets_secret@postgres:5432/casino_db
+      WALLET_SERVICE_URL: http://wallet-service:3002
+      COMPLIANCE_SERVICE_URL: http://compliance-service:3013
+      SERVICE_API_KEY: ${SERVICE_API_KEY:-internal-service-key-change-me}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      wallet-service:
+        condition: service_started
+
+  promotions-service:
+    build:
+      context: .
+      dockerfile: services/promotions-service/Dockerfile
+    environment:
+      PORT: 3008
+      DATABASE_URL: postgresql://wickets:wickets_secret@postgres:5432/promotions_db
+      WALLET_SERVICE_URL: http://wallet-service:3002
+      SERVICE_API_KEY: ${SERVICE_API_KEY:-internal-service-key-change-me}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      wallet-service:
+        condition: service_started
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: services/notification-service/Dockerfile
+    environment:
+      PORT: 3009
+      DATABASE_URL: postgresql://wickets:wickets_secret@postgres:5432/notification_db
+      RABBITMQ_URL: amqp://wickets:wickets_secret@rabbitmq:5672
+      SERVICE_API_KEY: ${SERVICE_API_KEY:-internal-service-key-change-me}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  kyc-service:
+    build:
+      context: .
+      dockerfile: services/kyc-service/Dockerfile
+    environment:
+      PORT: 3010
+      DATABASE_URL: postgresql://wickets:wickets_secret@postgres:5432/kyc_db
+      RABBITMQ_URL: amqp://wickets:wickets_secret@rabbitmq:5672
+      SERVICE_API_KEY: ${SERVICE_API_KEY:-internal-service-key-change-me}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  cms-service:
+    build:
+      context: .
+      dockerfile: services/cms-service/Dockerfile
+    environment:
+      PORT: 3011
+      DATABASE_URL: postgresql://wickets:wickets_secret@postgres:5432/cms_db
+      SERVICE_API_KEY: ${SERVICE_API_KEY:-internal-service-key-change-me}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  support-service:
+    build:
+      context: .
+      dockerfile: services/support-service/Dockerfile
+    environment:
+      PORT: 3012
+      DATABASE_URL: postgresql://wickets:wickets_secret@postgres:5432/support_db
+      RABBITMQ_URL: amqp://wickets:wickets_secret@rabbitmq:5672
+      SERVICE_API_KEY: ${SERVICE_API_KEY:-internal-service-key-change-me}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  compliance-service:
+    build:
+      context: .
+      dockerfile: services/compliance-service/Dockerfile
+    environment:
+      PORT: 3013
+      DATABASE_URL: postgresql://wickets:wickets_secret@postgres:5432/compliance_db
+      SERVICE_API_KEY: ${SERVICE_API_KEY:-internal-service-key-change-me}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  live-service:
+    build:
+      context: .
+      dockerfile: services/live-service/Dockerfile
+    environment:
+      PORT: 3014
+      DATABASE_URL: postgresql://wickets:wickets_secret@postgres:5432/live_db
+      CATALOG_SERVICE_URL: http://catalog-service:3003
+      ODDS_SERVICE_URL: http://odds-service:3004
+      SERVICE_API_KEY: ${SERVICE_API_KEY:-internal-service-key-change-me}
+      RABBITMQ_URL: amqp://wickets:wickets_secret@rabbitmq:5672
+    depends_on:
+      postgres:
+        condition: service_healthy
+      catalog-service:
+        condition: service_started
+
+  file-service:
+    build:
+      context: .
+      dockerfile: services/file-service/Dockerfile
+    environment:
+      PORT: 3015
+      UPLOAD_DIR: /app/uploads
+      SERVICE_API_KEY: ${SERVICE_API_KEY:-internal-service-key-change-me}
+    volumes:
+      - file_uploads:/app/uploads
+
+volumes:
+  pgdata:
+  wallet_uploads:
+  file_uploads:

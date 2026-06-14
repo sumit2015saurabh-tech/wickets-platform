@@ -1,0 +1,19 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model LiveEvent {
+  id          String   @id @default(uuid())
+  fixtureId   String   @map("fixture_id")
+  eventType   String   @map("event_type")
+  description String
+  payload     Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+  @@index([fixtureId, createdAt(sort: Desc)])
+  @@map("live_events")
+}

@@ -1,0 +1,40 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum PromotionType {
+  WELCOME_BONUS
+  CASHBACK
+  FREE_BET
+  REFERRAL
+}
+
+model Promotion {
+  id          String        @id @default(uuid())
+  name        String
+  type        PromotionType
+  description String?
+  bonusAmount Int           @map("bonus_amount")
+  code        String?       @unique
+  isActive    Boolean       @default(true) @map("is_active")
+  wageringReq Int           @default(1) @map("wagering_req")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  userPromotions UserPromotion[]
+  @@map("promotions")
+}
+
+model UserPromotion {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  promotionId String   @map("promotion_id")
+  bonusAmount Int      @map("bonus_amount")
+  createdAt   DateTime @default(now()) @map("created_at")
+  promotion   Promotion @relation(fields: [promotionId], references: [id])
+  @@unique([userId, promotionId])
+  @@map("user_promotions")
+}

@@ -1,0 +1,100 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum LedgerType {
+  ADMIN_DEPOSIT
+  WITHDRAWAL_REQUEST
+  WITHDRAWAL_APPROVED
+  WITHDRAWAL_REJECTED
+  BET_PLACED
+  BET_WON
+  BET_VOID
+  CASINO_BET
+  CASINO_WIN
+  BONUS_CREDIT
+}
+
+enum WithdrawalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model Wallet {
+  id              String   @id @default(uuid())
+  userId          String   @unique @map("user_id")
+  balance         Int      @default(0)
+  reservedBalance Int      @default(0) @map("reserved_balance")
+  version         Int      @default(0)
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("wallets")
+}
+
+model LedgerEntry {
+  id             String     @id @default(uuid())
+  userId         String     @map("user_id")
+  type           LedgerType
+  amount         Int
+  balanceAfter   Int        @map("balance_after")
+  note           String?
+  adminId        String?    @map("admin_id")
+  referenceId    String?    @map("reference_id")
+  idempotencyKey String?    @unique @map("idempotency_key")
+  createdAt      DateTime   @default(now()) @map("created_at")
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("ledger_entries")
+}
+
+model WithdrawalRequest {
+  id          String           @id @default(uuid())
+  userId      String           @map("user_id")
+  amount      Int
+  status      WithdrawalStatus @default(PENDING)
+  userNote    String?          @map("user_note")
+  adminNote   String?          @map("admin_note")
+  processedBy String?          @map("processed_by")
+  processedAt DateTime?        @map("processed_at")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  attachments Attachment[]
+
+  @@index([status, createdAt(sort: Desc)])
+  @@map("withdrawal_requests")
+}
+
+model Attachment {
+  id                  String   @id @default(uuid())
+  ledgerEntryId       String?  @map("ledger_entry_id")
+  withdrawalRequestId String?  @map("withdrawal_request_id")
+  fileId              String   @map("file_id")
+  fileName            String   @map("file_name")
+  uploadedById        String   @map("uploaded_by_id")
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  withdrawalRequest WithdrawalRequest? @relation(fields: [withdrawalRequestId], references: [id], onDelete: Cascade)
+
+  @@map("attachments")
+}
+
+model AdminNotification {
+  id        String   @id @default(uuid())
+  type      String
+  title     String
+  message   String
+  payload   Json
+  isRead    Boolean  @default(false) @map("is_read")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([isRead, createdAt(sort: Desc)])
+  @@map("admin_notifications")
+}

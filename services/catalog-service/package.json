@@ -1,0 +1,26 @@
+{
+  "name": "@wickets/catalog-service",
+  "version": "1.0.0",
+  "private": true,
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "@prisma/client": "^6.3.0",
+    "uuid": "^11.0.5",
+    "@wickets/service-common": "file:../../packages/service-common",
+    "@wickets/shared": "file:../../packages/shared"
+  },
+  "devDependencies": {
+    "prisma": "^6.3.0",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.7",
+    "@types/uuid": "^10.0.0",
+    "typescript": "^5.7.3"
+  }
+}

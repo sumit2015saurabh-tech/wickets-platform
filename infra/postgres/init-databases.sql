@@ -1,0 +1,14 @@
+CREATE DATABASE auth_db;
+CREATE DATABASE wallet_db;
+CREATE DATABASE catalog_db;
+CREATE DATABASE odds_db;
+CREATE DATABASE sportsbook_db;
+CREATE DATABASE settlement_db;
+CREATE DATABASE casino_db;
+CREATE DATABASE promotions_db;
+CREATE DATABASE notification_db;
+CREATE DATABASE kyc_db;
+CREATE DATABASE cms_db;
+CREATE DATABASE support_db;
+CREATE DATABASE compliance_db;
+CREATE DATABASE live_db;

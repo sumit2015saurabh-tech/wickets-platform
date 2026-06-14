@@ -159,7 +159,7 @@ async function broadcastOdds() {
       headers: { 'x-service-api-key': SVC_KEY },
     });
     if (!res.ok) return;
-    const payload = await res.json();
+    const payload = (await res.json()) as Record<string, unknown>;
     const msg = JSON.stringify({ ts: Date.now(), ...payload });
     for (const client of wss.clients) {
       if (client.readyState === WebSocket.OPEN) client.send(msg);

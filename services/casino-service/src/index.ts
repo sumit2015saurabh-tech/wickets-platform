@@ -52,12 +52,17 @@ app.post('/admin/games', userContextMiddleware, adminOnly, asyncHandler(async (r
 }));
 
 app.post('/internal/seed', asyncHandler(async (_req, res) => {
-  await prisma.casinoGame.upsert({
-    where: { slug: 'roulette' },
-    create: { name: 'Roulette', slug: 'roulette', category: 'table' },
-    update: {},
-  });
-  res.json({ message: 'Casino seeded' });
+  const catalog = require('../../../scripts/casino-catalog.js');
+  let count = 0;
+  for (const g of catalog) {
+    await prisma.casinoGame.upsert({
+      where: { slug: g.slug },
+      create: { name: g.name, slug: g.slug, category: g.category, minBet: g.minBet, maxBet: g.maxBet },
+      update: { name: g.name, category: g.category, isActive: true },
+    });
+    count += 1;
+  }
+  res.json({ message: 'Casino seeded', count });
 }));
 
 process.on('beforeExit', () => prisma.$disconnect());

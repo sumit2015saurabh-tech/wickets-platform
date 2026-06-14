@@ -1,9 +1,11 @@
+import http from 'http';
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import jwt from 'jsonwebtoken';
 import { createProxyMiddleware, fixRequestBody } from 'http-proxy-middleware';
+import { WebSocketServer, WebSocket } from 'ws';
 import {
   JwtPayload,
   USER_CONTEXT_HEADER,
@@ -12,6 +14,8 @@ import {
 } from '@wickets/shared';
 
 const port = Number(process.env.PORT) || 8080;
+const ODDS_URL = process.env.ODDS_SERVICE_URL ?? 'http://odds-service:3004';
+const SVC_KEY = process.env.SERVICE_API_KEY ?? 'internal-service-key-change-me';
 type AuthedRequest = Request & { user?: JwtPayload };
 
 const routes: Array<{ mount: string; target: string; publicPaths?: RegExp[] }> = [
@@ -104,16 +108,18 @@ function jwtMiddleware(req: AuthedRequest, res: Response, next: NextFunction) {
 
 const app = express();
 app.use(helmet());
-app.use(cors({ origin: (process.env.CORS_ORIGINS ?? 'http://localhost:3000').split(','), credentials: true }));
+app.use(cors({
+  origin: (process.env.CORS_ORIGINS ?? 'http://localhost:5173,https://sumit2015saurabh-tech.github.io').split(','),
+  credentials: true,
+}));
 app.use(express.json({ limit: '2mb' }));
 app.use(morgan('[gateway] :method :url :status'));
 
 app.get('/health', (_req, res) =>
-  res.json({ service: 'api-gateway', status: 'ok', architecture: 'microservices' }),
+  res.json({ service: 'api-gateway', status: 'ok', architecture: 'microservices', ws: '/ws/odds' }),
 );
 
-// /api/users/me -> auth /me
-app.use('/api/users', (req, res, next) => {
+app.use('/api/users', (req, _res, next) => {
   if (req.path === '/me') req.url = '/me';
   next();
 });
@@ -144,4 +150,32 @@ for (const route of routes) {
   });
 }
 
-app.listen(port, () => console.log(`API Gateway on :${port}`));
+const server = http.createServer(app);
+const wss = new WebSocketServer({ server, path: '/ws/odds' });
+
+async function broadcastOdds() {
+  try {
+    const res = await fetch(`${ODDS_URL}/internal/odds-snapshot`, {
+      headers: { 'x-service-api-key': SVC_KEY },
+    });
+    if (!res.ok) return;
+    const payload = await res.json();
+    const msg = JSON.stringify({ ts: Date.now(), ...payload });
+    for (const client of wss.clients) {
+      if (client.readyState === WebSocket.OPEN) client.send(msg);
+    }
+  } catch {
+    /* odds-service may be starting */
+  }
+}
+
+wss.on('connection', (ws, req) => {
+  const url = new URL(req.url ?? '', 'http://localhost');
+  const eventId = url.searchParams.get('event');
+  ws.send(JSON.stringify({ type: 'connected', eventId, intervalMs: 1000 }));
+  void broadcastOdds();
+});
+
+setInterval(broadcastOdds, 1000);
+
+server.listen(port, () => console.log(`API Gateway on :${port} (WebSocket /ws/odds)`));

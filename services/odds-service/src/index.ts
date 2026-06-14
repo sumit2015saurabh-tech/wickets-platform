@@ -73,11 +73,13 @@ app.post('/internal/seed-market', serviceKeyMiddleware, asyncHandler(async (req,
   const { fixtureId, homeName, awayName } = req.body;
   const existing = await prisma.market.findFirst({ where: { fixtureId, marketType: 'MATCH_WINNER' } });
   if (existing) return void res.json(existing);
-  const market = await prisma.market.create({
+
+  const matchMarket = await prisma.market.create({
     data: {
       fixtureId,
-      name: 'Match Winner',
+      name: 'Match Odds',
       marketType: 'MATCH_WINNER',
+      isLive: true,
       selections: {
         create: [
           { name: homeName, odds: 1.85, sortOrder: 1 },
@@ -87,8 +89,106 @@ app.post('/internal/seed-market', serviceKeyMiddleware, asyncHandler(async (req,
     },
     include: { selections: true },
   });
-  res.json(market);
+
+  await prisma.market.create({
+    data: {
+      fixtureId,
+      name: 'Bookmaker',
+      marketType: 'BOOKMAKER',
+      selections: {
+        create: [
+          { name: homeName, odds: 1.75, sortOrder: 1 },
+          { name: awayName, odds: 2.1, sortOrder: 2 },
+        ],
+      },
+    },
+  });
+
+  await prisma.market.create({
+    data: {
+      fixtureId,
+      name: '10 Over Runs',
+      marketType: 'FANCY',
+      selections: {
+        create: [
+          { name: 'Yes 52', odds: 95, sortOrder: 1 },
+          { name: 'No 52', odds: 95, sortOrder: 2 },
+        ],
+      },
+    },
+  });
+
+  res.json(matchMarket);
 }));
+
+function drift(value: number, volatility = 0.01): number {
+  const delta = (Math.random() - 0.5) * volatility;
+  return Math.max(1.01, Math.round((Number(value) + delta) * 100) / 100);
+}
+
+app.get('/internal/odds-snapshot', serviceKeyMiddleware, asyncHandler(async (_req, res) => {
+  const markets = await prisma.market.findMany({
+    where: { status: MarketStatus.OPEN },
+    include: { selections: { where: { isActive: true }, orderBy: { sortOrder: 'asc' } } },
+  });
+
+  const byFixture = new Map<string, typeof markets>();
+  for (const m of markets) {
+    const list = byFixture.get(m.fixtureId) ?? [];
+    list.push(m);
+    byFixture.set(m.fixtureId, list);
+  }
+
+  const fixtures = [...byFixture.entries()].map(([fixtureId, mkts]) => ({
+    id: fixtureId,
+    markets: mkts.map((m) => ({
+      id: m.id,
+      name: m.name,
+      type: m.marketType,
+      selections: m.selections.map((s) => ({
+        id: s.id,
+        name: s.name,
+        back: Number(s.odds),
+        lay: Math.round((Number(s.odds) + 0.02) * 100) / 100,
+      })),
+    })),
+  }));
+
+  res.json({ fixtures });
+}));
+
+app.post('/internal/tick-odds', serviceKeyMiddleware, asyncHandler(async (_req, res) => {
+  const selections = await prisma.marketSelection.findMany({
+    where: { isActive: true, market: { status: MarketStatus.OPEN } },
+    include: { market: true },
+  });
+  let updated = 0;
+  for (const s of selections) {
+    const vol = s.market.marketType === 'FANCY' ? 0.4 : 0.012;
+    await prisma.marketSelection.update({
+      where: { id: s.id },
+      data: { odds: drift(Number(s.odds), vol) },
+    });
+    updated += 1;
+  }
+  res.json({ updated, ts: Date.now() });
+}));
+
+// Real-time odds tick every 1s — WebSocket gateway broadcasts snapshot (20wickets uses 20s polling)
+async function tickOdds() {
+  const selections = await prisma.marketSelection.findMany({
+    where: { isActive: true, market: { status: MarketStatus.OPEN } },
+    include: { market: true },
+  });
+  for (const s of selections) {
+    const vol = s.market.marketType === 'FANCY' ? 0.4 : 0.012;
+    await prisma.marketSelection.update({
+      where: { id: s.id },
+      data: { odds: drift(Number(s.odds), vol) },
+    });
+  }
+}
+setInterval(() => { tickOdds().catch(() => {}); }, 1000);
 
 process.on('beforeExit', () => prisma.$disconnect());
 startService(app, port, 'odds-service');
